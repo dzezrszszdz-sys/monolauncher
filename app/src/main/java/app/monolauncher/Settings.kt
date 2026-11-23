@@ -1,11 +1,16 @@
 package app.monolauncher
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +45,9 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SettingsSheet(vm: LauncherViewModel) {
     var dialog by remember { mutableIntStateOf(-1) }   // 0 = bal, 1 = jobb, 2 = elrejtettek
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) vm.setWallpaper(uri)
+    }
 
     ModalBottomSheet(
         onDismissRequest = { vm.settingsOpen = false },
@@ -60,7 +68,7 @@ fun SettingsSheet(vm: LauncherViewModel) {
 
             Label("Óra stílusa")
             PillRow(
-                options = listOf("Nagy", "Egysoros"),
+                options = listOf("Nagy", "Egysoros", "Két soros", "Körvonal", "Analóg"),
                 selected = vm.clockStyle,
                 onSelect = vm::updateClockStyle,
             )
@@ -72,7 +80,7 @@ fun SettingsSheet(vm: LauncherViewModel) {
                 onSelect = { vm.updateClockWeight(listOf(100, 200, 300)[it]) },
             )
 
-            if (vm.clockStyle == 0) {
+            if (vm.clockStyle != 1) {
                 Label("Óra mérete")
                 Slider(
                     value = vm.clockSize,
@@ -91,6 +99,26 @@ fun SettingsSheet(vm: LauncherViewModel) {
             SettingSwitch("Dátum megjelenítése", vm.showDate, vm::updateShowDate)
             SettingSwitch("Akkumulátor százalék", vm.showBattery, vm::updateShowBattery)
             SettingSwitch("Egyszínű (fehér) ikonok", vm.monoIcons, vm::updateMonoIcons)
+
+            Spacer(Modifier.height(8.dp))
+            Label("Háttér")
+            SettingLink("Háttérkép", if (vm.wallpaper != null) "Csere" else "Kiválasztás") {
+                picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
+            if (vm.wallpaper != null) {
+                SettingLink("Háttérkép eltávolítása", "") { vm.clearWallpaper() }
+                Text("Sötétítés", color = Ui.fg, fontSize = 15.sp)
+                Slider(
+                    value = vm.wallpaperDim,
+                    onValueChange = vm::updateWallpaperDim,
+                    valueRange = 0f..0.9f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Ui.fg,
+                        activeTrackColor = Ui.fg,
+                        inactiveTrackColor = Ui.faint,
+                    ),
+                )
+            }
 
             Spacer(Modifier.height(8.dp))
             Label("Gesztusok")
@@ -144,9 +172,13 @@ private fun Label(text: String) {
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PillRow(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         options.forEachIndexed { i, text ->
             val on = i == selected
             Box(

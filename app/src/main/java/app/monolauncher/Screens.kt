@@ -10,6 +10,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,7 +42,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -59,6 +62,17 @@ fun LauncherRoot(vm: LauncherViewModel) {
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Ui.bg)) {
         val d = Dims(maxWidth, maxHeight)
+
+        // Háttérkép (ha van) sötétítéssel; különben tiszta fekete.
+        vm.wallpaper?.let { wp ->
+            Image(
+                bitmap = wp,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = vm.wallpaperDim)))
+        }
 
         AnimatedContent(
             targetState = vm.screen,

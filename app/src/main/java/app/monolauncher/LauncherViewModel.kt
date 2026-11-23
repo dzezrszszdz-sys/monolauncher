@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
 import android.provider.MediaStore
 import android.text.format.DateFormat
 import androidx.compose.runtime.derivedStateOf
@@ -15,6 +19,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
@@ -22,6 +28,7 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.Normalizer
 
 data class AppInfo(
@@ -77,6 +84,12 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
     var swipeRightApp by mutableStateOf(prefs.getString("swipeRight", null))
         private set
 
+    var wallpaper by mutableStateOf<ImageBitmap?>(null)
+        private set
+    var wallpaperDim by mutableFloatStateOf(prefs.getFloat("wallpaperDim", 0.45f))
+        private set
+    private val wallpaperFile = File(app.filesDir, "wallpaper.jpg")
+
     var favorites by mutableStateOf(readList("favorites"))
         private set
     var hidden by mutableStateOf(readList("hidden").toSet())
@@ -107,7 +120,52 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
         }
         ContextCompat.registerReceiver(app, packageReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         reload()
+        loadWallpaper()
     }
+
+    // ---------- Háttérkép ----------
+    private fun loadWallpaper() {
+        viewModelScope.launch {
+            wallpaper = withContext(Dispatchers.IO) {
+                if (wallpaperFile.exists()) {
+                    BitmapFactory.decodeFile(wallpaperFile.absolutePath)?.asImageBitmap()
+                } else null
+            }
+        }
+    }
+
+    /** A kiválasztott képet lekicsinyítve a saját tárhelyre másolja – nincs szükség engedélyre. */
+    fun setWallpaper(uri: Uri) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val source = ImageDecoder.createSource(app.contentResolver, uri)
+                    val bmp = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        val w = info.size.width
+                        val h = info.size.height
+                        val s = minOf(1f, 1800f / maxOf(w, h))
+                        decoder.setTargetSize(
+                            (w * s).toInt().coerceAtLeast(1),
+                            (h * s).toInt().coerceAtLeast(1),
+                        )
+                    }
+                    wallpaperFile.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                    bmp.asImageBitmap()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (result != null) wallpaper = result
+        }
+    }
+
+    fun clearWallpaper() {
+        wallpaperFile.delete()
+        wallpaper = null
+    }
+
+    fun updateWallpaperDim(v: Float) { wallpaperDim = v; prefs.edit { putFloat("wallpaperDim", v) } }
 
     override fun onCleared() {
         runCatching { app.unregisterReceiver(packageReceiver) }
