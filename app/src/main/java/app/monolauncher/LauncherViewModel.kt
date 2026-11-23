@@ -1,0 +1,206 @@
+package app.monolauncher
+
+import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.provider.MediaStore
+import android.text.format.DateFormat
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.Normalizer
+
+data class AppInfo(
+    val key: String,          // ComponentName.flattenToString()
+    val packageName: String,
+    val label: String,
+    val sortKey: String,      // ékezet nélküli, kisbetűs név
+    val letter: Char,         // A–Z, vagy '#'
+)
+
+enum class Screen { HOME, ALL }
+
+data class ScrollRequest(val letter: Char, val id: Int)
+
+private val diacritics = Regex("\\p{InCombiningDiacriticalMarks}+")
+
+fun normalize(s: String): String =
+    Normalizer.normalize(s, Normalizer.Form.NFD).replace(diacritics, "").lowercase()
+
+class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
+
+    private val prefs = app.getSharedPreferences("launcher", Context.MODE_PRIVATE)
+
+    // ---------- UI állapot ----------
+    var apps by mutableStateOf<List<AppInfo>>(emptyList())
+        private set
+    var screen by mutableStateOf(Screen.HOME)
+    var searchOpen by mutableStateOf(false)
+    var settingsOpen by mutableStateOf(false)
+    var menuApp by mutableStateOf<AppInfo?>(null)
+    var railTouch by mutableStateOf<Char?>(null)
+    var activeLetter by mutableStateOf<Char?>(null)
+    var scrollRequest by mutableStateOf<ScrollRequest?>(null)
+    private var requestCounter = 0
+
+    // ---------- Beállítások ----------
+    var clockStyle by mutableIntStateOf(prefs.getInt("clockStyle", 0))      // 0 = nagy, 1 = egysoros
+        private set
+    var clockWeight by mutableIntStateOf(prefs.getInt("clockWeight", 200))  // 100..300
+        private set
+    var clockSize by mutableFloatStateOf(prefs.getFloat("clockSize", 84f))
+        private set
+    var use24h by mutableStateOf(prefs.getBoolean("use24h", DateFormat.is24HourFormat(app)))
+        private set
+    var showDate by mutableStateOf(prefs.getBoolean("showDate", true))
+        private set
+    var showBattery by mutableStateOf(prefs.getBoolean("showBattery", true))
+        private set
+    var monoIcons by mutableStateOf(prefs.getBoolean("monoIcons", true))
+        private set
+    var swipeLeftApp by mutableStateOf(prefs.getString("swipeLeft", null))
+        private set
+    var swipeRightApp by mutableStateOf(prefs.getString("swipeRight", null))
+        private set
+
+    var favorites by mutableStateOf(readList("favorites"))
+        private set
+    var hidden by mutableStateOf(readList("hidden").toSet())
+        private set
+
+    // ---------- Származtatott listák ----------
+    val visibleApps: List<AppInfo> by derivedStateOf { apps.filter { it.key !in hidden } }
+    val favoriteApps: List<AppInfo> by derivedStateOf {
+        val map = visibleApps.associateBy { it.key }
+        favorites.mapNotNull { map[it] }
+    }
+    val letters: List<Char> by derivedStateOf { visibleApps.map { it.letter }.distinct() }
+
+    // ---------- Alkalmazások betöltése ----------
+    private val packageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            reload()
+        }
+    }
+
+    init {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(app, packageReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        reload()
+    }
+
+    override fun onCleared() {
+        runCatching { app.unregisterReceiver(packageReceiver) }
+        super.onCleared()
+    }
+
+    fun reload() {
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.Default) {
+                val pm = app.packageManager
+                val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                pm.queryIntentActivities(query, PackageManager.ResolveInfoFlags.of(0))
+                    .filter { it.activityInfo.packageName != app.packageName }
+                    .map { ri ->
+                        val cn = ComponentName(ri.activityInfo.packageName, ri.activityInfo.name)
+                        val label = ri.loadLabel(pm).toString()
+                        val sort = normalize(label)
+                        val first = sort.firstOrNull()
+                        val letter = if (first != null && first.isLetter()) first.uppercaseChar() else '#'
+                        AppInfo(cn.flattenToString(), cn.packageName, label, sort, letter)
+                    }
+                    .distinctBy { it.key }
+                    .sortedWith(compareBy<AppInfo>({ it.letter == '#' }, { it.sortKey }))
+            }
+            IconLoader.clear()
+            apps = list
+        }
+    }
+
+    // ---------- Navigáció ----------
+    fun goHome() {
+        screen = Screen.HOME
+        searchOpen = false
+        settingsOpen = false
+        menuApp = null
+        railTouch = null
+    }
+
+    fun requestLetter(letter: Char) {
+        scrollRequest = ScrollRequest(letter, requestCounter++)
+    }
+
+    fun swipe(ctx: Context, left: Boolean) {
+        val key = if (left) swipeLeftApp else swipeRightApp
+        if (key != null) {
+            ctx.launchApp(key)
+        } else {
+            val action = if (left) MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA else Intent.ACTION_DIAL
+            ctx.safeStart(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    // ---------- Kedvencek / rejtett ----------
+    fun toggleFavorite(key: String) {
+        favorites = if (key in favorites) favorites - key else favorites + key
+        prefs.edit { putString("favorites", favorites.joinToString("\n")) }
+    }
+
+    fun moveFavoriteUp(key: String) {
+        val i = favorites.indexOf(key)
+        if (i <= 0) return
+        val m = favorites.toMutableList()
+        m[i] = m[i - 1]
+        m[i - 1] = key
+        favorites = m
+        prefs.edit { putString("favorites", favorites.joinToString("\n")) }
+    }
+
+    fun hide(key: String) {
+        hidden = hidden + key
+        if (key in favorites) favorites = favorites - key
+        prefs.edit {
+            putString("hidden", hidden.joinToString("\n"))
+            putString("favorites", favorites.joinToString("\n"))
+        }
+    }
+
+    fun unhide(key: String) {
+        hidden = hidden - key
+        prefs.edit { putString("hidden", hidden.joinToString("\n")) }
+    }
+
+    // ---------- Beállítás-módosítók ----------
+    fun updateClockStyle(v: Int) { clockStyle = v; prefs.edit { putInt("clockStyle", v) } }
+    fun updateClockWeight(v: Int) { clockWeight = v; prefs.edit { putInt("clockWeight", v) } }
+    fun updateClockSize(v: Float) { clockSize = v; prefs.edit { putFloat("clockSize", v) } }
+    fun updateUse24h(v: Boolean) { use24h = v; prefs.edit { putBoolean("use24h", v) } }
+    fun updateShowDate(v: Boolean) { showDate = v; prefs.edit { putBoolean("showDate", v) } }
+    fun updateShowBattery(v: Boolean) { showBattery = v; prefs.edit { putBoolean("showBattery", v) } }
+    fun updateMonoIcons(v: Boolean) { monoIcons = v; prefs.edit { putBoolean("monoIcons", v) } }
+    fun updateSwipeLeft(key: String?) { swipeLeftApp = key; prefs.edit { putString("swipeLeft", key) } }
+    fun updateSwipeRight(key: String?) { swipeRightApp = key; prefs.edit { putString("swipeRight", key) } }
+
+    private fun readList(name: String): List<String> =
+        prefs.getString(name, "")?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+}
