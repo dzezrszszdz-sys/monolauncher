@@ -25,6 +25,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        vm.launching = false
+    }
+
     // Home gomb megnyomása: vissza a főképernyőre.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

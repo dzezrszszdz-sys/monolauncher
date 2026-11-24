@@ -3,6 +3,11 @@ package app.monolauncher
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -37,17 +42,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,7 +68,28 @@ fun LauncherRoot(vm: LauncherViewModel) {
         if (vm.searchOpen) vm.searchOpen = false else vm.screen = Screen.HOME
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Ui.bg)) {
+    // Amíg egy app nyílik, a launcher finoman hátrébb húzódik és elhalványul (mélység-érzet).
+    val launchScale by animateFloatAsState(
+        if (vm.launching) 0.93f else 1f,
+        spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow),
+        label = "launchScale",
+    )
+    val launchAlpha by animateFloatAsState(
+        if (vm.launching) 0.35f else 1f,
+        spring(stiffness = Spring.StiffnessLow),
+        label = "launchAlpha",
+    )
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                scaleX = launchScale
+                scaleY = launchScale
+                alpha = launchAlpha
+            }
+            .background(Ui.bg)
+    ) {
         val d = Dims(maxWidth, maxHeight)
 
         // Háttérkép (ha van) sötétítéssel; különben tiszta fekete.
@@ -78,8 +107,10 @@ fun LauncherRoot(vm: LauncherViewModel) {
             targetState = vm.screen,
             transitionSpec = {
                 val toAll = targetState == Screen.ALL
-                (fadeIn(tween(260)) + slideInVertically(tween(260)) { if (toAll) it / 14 else -it / 14 }) togetherWith
-                    fadeOut(tween(160))
+                (fadeIn(tween(320, easing = LinearOutSlowInEasing)) +
+                    slideInVertically(tween(380, easing = FastOutSlowInEasing)) { if (toAll) it / 10 else -it / 10 } +
+                    scaleIn(tween(380, easing = FastOutSlowInEasing), initialScale = 0.96f)) togetherWith
+                    (fadeOut(tween(180)) + scaleOut(tween(280, easing = FastOutSlowInEasing), targetScale = 0.97f))
             },
             label = "screen",
         ) { s ->
@@ -145,6 +176,7 @@ fun LauncherRoot(vm: LauncherViewModel) {
 @Composable
 fun HomeScreen(vm: LauncherViewModel, d: Dims) {
     val ctx = LocalContext.current
+    val view = LocalView.current
     val haptic = LocalHapticFeedback.current
     val favs = vm.favoriteApps
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -214,7 +246,7 @@ fun HomeScreen(vm: LauncherViewModel, d: Dims) {
                     app = app,
                     mono = vm.monoIcons,
                     d = d,
-                    onClick = { ctx.launchApp(app.key) },
+                    onClick = { from -> vm.open(ctx, view, app.key, from) },
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         vm.menuApp = app
@@ -229,6 +261,7 @@ fun HomeScreen(vm: LauncherViewModel, d: Dims) {
 @Composable
 fun AllAppsScreen(vm: LauncherViewModel, d: Dims) {
     val ctx = LocalContext.current
+    val view = LocalView.current
     val haptic = LocalHapticFeedback.current
     val apps = vm.visibleApps
     val listState = rememberLazyListState()
@@ -274,7 +307,7 @@ fun AllAppsScreen(vm: LauncherViewModel, d: Dims) {
                     app = app,
                     mono = vm.monoIcons,
                     d = d,
-                    onClick = { ctx.launchApp(app.key) },
+                    onClick = { from -> vm.open(ctx, view, app.key, from) },
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         vm.menuApp = app

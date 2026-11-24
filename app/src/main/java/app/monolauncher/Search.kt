@@ -28,7 +28,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SearchOverlay(vm: LauncherViewModel, d: Dims) {
     val ctx = LocalContext.current
+    val view = LocalView.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
     var query by remember { mutableStateOf("") }
@@ -51,10 +54,10 @@ fun SearchOverlay(vm: LauncherViewModel, d: Dims) {
             .sortedBy { if (it.sortKey.startsWith(q)) 0 else 1 }
     }
 
-    fun open(app: AppInfo) {
+    fun open(app: AppInfo, from: Rect? = null) {
         keyboard?.hide()
         vm.searchOpen = false
-        ctx.launchApp(app.key)
+        vm.open(ctx, view, app.key, from)
     }
 
     LaunchedEffect(Unit) {
@@ -98,7 +101,7 @@ fun SearchOverlay(vm: LauncherViewModel, d: Dims) {
                     app = app,
                     mono = vm.monoIcons,
                     d = d,
-                    onClick = { open(app) },
+                    onClick = { from -> open(app, from) },
                     onLongClick = { vm.menuApp = app },
                 )
             }

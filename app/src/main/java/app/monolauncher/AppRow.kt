@@ -1,7 +1,9 @@
 package app.monolauncher
 
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
@@ -19,11 +21,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,7 +46,7 @@ fun AppRow(
     app: AppInfo,
     mono: Boolean,
     d: Dims,
-    onClick: () -> Unit,
+    onClick: (Rect?) -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,8 +57,18 @@ fun AppRow(
 
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(120), label = "scale")
-    val dim by animateFloatAsState(if (pressed) 0.55f else 1f, tween(120), label = "dim")
+    var iconBounds by remember { mutableStateOf<Rect?>(null) }
+    // Rugószerű, természetes visszajelzés: lenyomáskor besüpped, elengedéskor finoman visszalendül.
+    val scale by animateFloatAsState(
+        if (pressed) 0.94f else 1f,
+        spring(dampingRatio = 0.55f, stiffness = 420f),
+        label = "scale",
+    )
+    val dim by animateFloatAsState(
+        if (pressed) 0.6f else 1f,
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium),
+        label = "dim",
+    )
     val iconAlpha by animateFloatAsState(if (icon != null) 1f else 0f, tween(220), label = "iconAlpha")
 
     val iconSize = 26.dp
@@ -70,13 +87,13 @@ fun AppRow(
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
-                onClick = onClick,
+                onClick = { onClick(iconBounds) },
                 onLongClick = onLongClick,
             )
             .padding(start = d.iconStart),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(iconSize)) {
+        Box(Modifier.size(iconSize).onGloballyPositioned { iconBounds = it.boundsInWindow() }) {
             icon?.let {
                 Image(
                     bitmap = it,

@@ -12,6 +12,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.provider.MediaStore
+import android.view.View
 import android.text.format.DateFormat
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -19,6 +20,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.ContextCompat
@@ -63,6 +65,13 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
     var activeLetter by mutableStateOf<Char?>(null)
     var scrollRequest by mutableStateOf<ScrollRequest?>(null)
     private var requestCounter = 0
+
+    /** Igaz, amíg egy alkalmazás nyílik: a launcher ilyenkor finoman hátrébb húzódik. */
+    var launching by mutableStateOf(false)
+
+    fun open(ctx: Context, view: View, key: String, from: Rect?) {
+        if (ctx.launchApp(key, view, from)) launching = true
+    }
 
     // ---------- Beállítások ----------
     var clockStyle by mutableIntStateOf(prefs.getInt("clockStyle", 0))      // 0 = nagy, 1 = egysoros
@@ -192,6 +201,11 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             IconLoader.clear()
             apps = list
+            // Az első ikonok előre betöltése, hogy görgetéskor ne villogjanak.
+            val mono = monoIcons
+            launch(Dispatchers.Default) {
+                list.take(40).forEach { IconLoader.load(app, it.key, mono) }
+            }
         }
     }
 
