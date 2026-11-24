@@ -107,6 +107,7 @@ fun AppRow(
             text = app.label,
             color = Ui.fg,
             fontSize = 15.sp,
+            fontFamily = UiFont500,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

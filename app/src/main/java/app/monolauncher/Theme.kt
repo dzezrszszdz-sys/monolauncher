@@ -6,8 +6,23 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+/** Roboto változtatható betűtípus: a vastagság minden telefonon pontosan úgy jelenik meg, ahogy kérjük. */
+fun clockFont(weight: Int): FontFamily = FontFamily(
+    Font(
+        resId = R.font.roboto_var,
+        weight = FontWeight(weight),
+        variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+    )
+)
+
+val UiFont500: FontFamily = clockFont(500)
 
 object Ui {
     val bg = Color.Black

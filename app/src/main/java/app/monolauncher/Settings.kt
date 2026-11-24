@@ -102,11 +102,16 @@ fun SettingsSheet(vm: LauncherViewModel) {
 
             Spacer(Modifier.height(8.dp))
             Label("Háttér")
-            SettingLink("Háttérkép", if (vm.wallpaper != null) "Csere" else "Kiválasztás") {
+            SettingLink("Háttérkép", if (vm.wallpaperMode == 1) "Csere" else "Saját kép választása") {
                 picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
+            if (vm.wallpaperMode != 0) {
+                SettingLink("Alapértelmezett háttér", "Visszaállítás") { vm.resetWallpaper() }
+            }
+            if (vm.wallpaperMode != 2) {
+                SettingLink("Háttér kikapcsolása", "Fekete") { vm.clearWallpaper() }
+            }
             if (vm.wallpaper != null) {
-                SettingLink("Háttérkép eltávolítása", "") { vm.clearWallpaper() }
                 Text("Sötétítés", color = Ui.fg, fontSize = 15.sp)
                 Slider(
                     value = vm.wallpaperDim,

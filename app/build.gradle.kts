@@ -16,11 +16,23 @@ android {
         versionName = "1.0"
     }
 
+    // Fix aláírókulcs: így minden új verzió az előző fölé telepíthető, és a beállításaid megmaradnak.
+    signingConfigs {
+        create("fixed") {
+            storeFile = file("monolauncher.keystore")
+            storePassword = "android"
+            keyAlias = "monolauncher"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("fixed")
+        }
         release {
             isMinifyEnabled = false
-            // Személyes használatra a debug kulccsal írjuk alá, így a release APK is telepíthető.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("fixed")
         }
     }
 

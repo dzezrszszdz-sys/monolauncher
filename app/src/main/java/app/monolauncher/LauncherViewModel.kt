@@ -97,6 +97,9 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
         private set
     var wallpaperDim by mutableFloatStateOf(prefs.getFloat("wallpaperDim", 0.45f))
         private set
+    /** 0 = beépített alapháttér, 1 = saját kép, 2 = nincs (tiszta fekete). */
+    var wallpaperMode by mutableIntStateOf(prefs.getInt("wallpaperMode", 0))
+        private set
     private val wallpaperFile = File(app.filesDir, "wallpaper.jpg")
 
     var favorites by mutableStateOf(readList("favorites"))
@@ -132,13 +135,44 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
         loadWallpaper()
     }
 
+    /**
+     * Első indításkor (üres kedvencek mellett) az alapértelmezett kedvencek beállítása név alapján.
+     * Ami nincs telepítve, azt kihagyja. Később a kedvenceid megmaradnak, nem íródnak felül.
+     */
+    private fun applyDefaultFavorites(list: List<AppInfo>) {
+        if (list.isEmpty() || prefs.getBoolean("favoritesInit", false)) return
+        if (favorites.isEmpty()) {
+            val wanted = listOf(
+                setOf("brave"),
+                setOf("telefon", "phone"),
+                setOf("messages", "uzenetek"),
+                setOf("terkep", "maps"),
+                setOf("tiktok lite"),
+                setOf("messenger"),
+                setOf("lite"),
+                setOf("slovnaft move"),
+                setOf("instagram"),
+                setOf("vub banking"),
+            )
+            val picked = wanted.mapNotNull { names -> list.firstOrNull { it.sortKey in names }?.key }.distinct()
+            favorites = picked
+            prefs.edit { putString("favorites", picked.joinToString("\n")) }
+        }
+        prefs.edit { putBoolean("favoritesInit", true) }
+    }
+
     // ---------- Háttérkép ----------
     private fun loadWallpaper() {
         viewModelScope.launch {
+            val mode = wallpaperMode
             wallpaper = withContext(Dispatchers.IO) {
-                if (wallpaperFile.exists()) {
-                    BitmapFactory.decodeFile(wallpaperFile.absolutePath)?.asImageBitmap()
-                } else null
+                when {
+                    mode == 1 && wallpaperFile.exists() ->
+                        BitmapFactory.decodeFile(wallpaperFile.absolutePath)?.asImageBitmap()
+                    mode == 0 ->
+                        BitmapFactory.decodeResource(app.resources, R.drawable.default_wallpaper)?.asImageBitmap()
+                    else -> null
+                }
             }
         }
     }
@@ -165,13 +199,27 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
                     null
                 }
             }
-            if (result != null) wallpaper = result
+            if (result != null) {
+                wallpaper = result
+                wallpaperMode = 1
+                prefs.edit { putInt("wallpaperMode", 1) }
+            }
         }
     }
 
+    /** Tiszta fekete háttér. */
     fun clearWallpaper() {
         wallpaperFile.delete()
         wallpaper = null
+        wallpaperMode = 2
+        prefs.edit { putInt("wallpaperMode", 2) }
+    }
+
+    /** Vissza a beépített alaphátterre. */
+    fun resetWallpaper() {
+        wallpaperMode = 0
+        prefs.edit { putInt("wallpaperMode", 0) }
+        loadWallpaper()
     }
 
     fun updateWallpaperDim(v: Float) { wallpaperDim = v; prefs.edit { putFloat("wallpaperDim", v) } }
@@ -201,6 +249,7 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             IconLoader.clear()
             apps = list
+            applyDefaultFavorites(list)
             // Az első ikonok előre betöltése, hogy görgetéskor ne villogjanak.
             val mono = monoIcons
             launch(Dispatchers.Default) {

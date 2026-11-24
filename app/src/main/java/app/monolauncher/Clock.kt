@@ -121,6 +121,8 @@ fun ClockView(vm: LauncherViewModel) {
     )
     val size = vm.clockSize.sp
     val weight = FontWeight(vm.clockWeight)
+    val font = remember(vm.clockWeight) { clockFont(vm.clockWeight) }
+    val boldFont = remember { clockFont(700) }
 
     @Composable
     fun InfoRow() {
@@ -150,8 +152,8 @@ fun ClockView(vm: LauncherViewModel) {
         2 -> {
             // Két soros: óra felül, perc alul.
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(hours, color = Ui.fg, fontSize = size, fontWeight = weight, lineHeight = size * 0.95f, maxLines = 1)
-                Text(minutes, color = Ui.fg, fontSize = size, fontWeight = weight, lineHeight = size * 0.95f, maxLines = 1)
+                Text(hours, color = Ui.fg, fontSize = size, fontFamily = font, fontWeight = weight, lineHeight = size * 0.95f, maxLines = 1)
+                Text(minutes, color = Ui.fg, fontSize = size, fontFamily = font, fontWeight = weight, lineHeight = size * 0.95f, maxLines = 1)
                 InfoRow()
             }
         }
@@ -165,6 +167,7 @@ fun ClockView(vm: LauncherViewModel) {
                         style = TextStyle(
                             color = Ui.fg,
                             fontSize = size,
+                            fontFamily = boldFont,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 2.sp,
                             drawStyle = Stroke(width = 3f),
@@ -196,6 +199,7 @@ fun ClockView(vm: LauncherViewModel) {
                         text = t,
                         color = Ui.fg,
                         fontSize = size,
+                        fontFamily = font,
                         fontWeight = weight,
                         letterSpacing = (-1).sp,
                         maxLines = 1,
