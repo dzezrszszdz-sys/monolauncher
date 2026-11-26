@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Valódi alkalmazásikonok betöltése.
@@ -23,15 +24,29 @@ import java.util.concurrent.ConcurrentHashMap
  *  - mono = false: eredeti, színes ikon.
  */
 object IconLoader {
-    private const val SIZE = 128
+    private const val SIZE = 96
     private val cache = ConcurrentHashMap<String, ImageBitmap>()
 
+    private val totalNs = AtomicLong(0)
+    private val loaded = AtomicLong(0)
+
     fun clear() = cache.clear()
+    fun count(): Long = loaded.get()
+    fun avgMs(): Double = if (loaded.get() == 0L) 0.0 else totalNs.get() / 1e6 / loaded.get()
 
     suspend fun load(ctx: Context, key: String, mono: Boolean): ImageBitmap? =
         withContext(Dispatchers.Default) {
             val cacheKey = (if (mono) "m:" else "o:") + key
-            cache[cacheKey] ?: render(ctx, key, mono)?.also { cache[cacheKey] = it }
+            cache[cacheKey] ?: run {
+                val t0 = System.nanoTime()
+                val bmp = render(ctx, key, mono)
+                if (bmp != null) {
+                    totalNs.addAndGet(System.nanoTime() - t0)
+                    loaded.incrementAndGet()
+                    cache[cacheKey] = bmp
+                }
+                bmp
+            }
         }
 
     private fun render(ctx: Context, key: String, mono: Boolean): ImageBitmap? {

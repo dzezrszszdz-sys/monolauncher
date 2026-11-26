@@ -11,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.View
 import android.text.format.DateFormat
@@ -18,6 +19,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
@@ -65,6 +67,32 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
     var activeLetter by mutableStateOf<Char?>(null)
     var scrollRequest by mutableStateOf<ScrollRequest?>(null)
     private var requestCounter = 0
+
+    // ---------- Mono Performance ----------
+    var perfUnlocked by mutableStateOf(prefs.getBoolean("perfUnlocked", false))
+        private set
+    var showFps by mutableStateOf(prefs.getBoolean("showFps", false))
+        private set
+    var showMem by mutableStateOf(prefs.getBoolean("showMem", false))
+        private set
+    var showTemp by mutableStateOf(prefs.getBoolean("showTemp", false))
+        private set
+    var perfOpen by mutableStateOf(false)
+    var lastTestResult by mutableStateOf<String?>(null)
+    var startupMs by mutableLongStateOf(-1L)
+    var appListMs by mutableLongStateOf(0L)
+
+    fun unlockPerf() { perfUnlocked = true; prefs.edit { putBoolean("perfUnlocked", true) } }
+    fun lockPerf() {
+        perfUnlocked = false; showFps = false; showMem = false; showTemp = false
+        prefs.edit {
+            putBoolean("perfUnlocked", false)
+            putBoolean("showFps", false); putBoolean("showMem", false); putBoolean("showTemp", false)
+        }
+    }
+    fun updateShowFps(v: Boolean) { showFps = v; prefs.edit { putBoolean("showFps", v) } }
+    fun updateShowMem(v: Boolean) { showMem = v; prefs.edit { putBoolean("showMem", v) } }
+    fun updateShowTemp(v: Boolean) { showTemp = v; prefs.edit { putBoolean("showTemp", v) } }
 
     /** Igaz, amíg egy alkalmazás nyílik: a launcher ilyenkor finoman hátrébb húzódik. */
     var launching by mutableStateOf(false)
@@ -222,7 +250,8 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
         loadWallpaper()
     }
 
-    fun updateWallpaperDim(v: Float) { wallpaperDim = v; prefs.edit { putFloat("wallpaperDim", v) } }
+    fun updateWallpaperDim(v: Float) { wallpaperDim = v }
+    fun commitWallpaperDim() { prefs.edit { putFloat("wallpaperDim", wallpaperDim) } }
 
     override fun onCleared() {
         runCatching { app.unregisterReceiver(packageReceiver) }
@@ -231,6 +260,7 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun reload() {
         viewModelScope.launch {
+            val t0 = SystemClock.elapsedRealtime()
             val list = withContext(Dispatchers.Default) {
                 val pm = app.packageManager
                 val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -249,6 +279,7 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             IconLoader.clear()
             apps = list
+            appListMs = SystemClock.elapsedRealtime() - t0
             applyDefaultFavorites(list)
             // Az első ikonok előre betöltése, hogy görgetéskor ne villogjanak.
             val mono = monoIcons
@@ -263,6 +294,7 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
         screen = Screen.HOME
         searchOpen = false
         settingsOpen = false
+        perfOpen = false
         menuApp = null
         railTouch = null
     }
@@ -314,7 +346,8 @@ class LauncherViewModel(private val app: Application) : AndroidViewModel(app) {
     // ---------- Beállítás-módosítók ----------
     fun updateClockStyle(v: Int) { clockStyle = v; prefs.edit { putInt("clockStyle", v) } }
     fun updateClockWeight(v: Int) { clockWeight = v; prefs.edit { putInt("clockWeight", v) } }
-    fun updateClockSize(v: Float) { clockSize = v; prefs.edit { putFloat("clockSize", v) } }
+    fun updateClockSize(v: Float) { clockSize = v }
+    fun commitClockSize() { prefs.edit { putFloat("clockSize", clockSize) } }
     fun updateUse24h(v: Boolean) { use24h = v; prefs.edit { putBoolean("use24h", v) } }
     fun updateShowDate(v: Boolean) { showDate = v; prefs.edit { putBoolean("showDate", v) } }
     fun updateShowBattery(v: Boolean) { showBattery = v; prefs.edit { putBoolean("showBattery", v) } }

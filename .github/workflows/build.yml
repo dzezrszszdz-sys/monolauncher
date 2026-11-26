@@ -17,15 +17,20 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Build optimized release APK and debug APK
+        run: ./gradlew assembleRelease assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: MonoLauncher-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk MonoLauncher.apk
-          gh release create "v1.0-${{ github.run_number }}" MonoLauncher.apk --title "Mono Launcher" --notes "Telepitheto APK (debug)."
+          cp app/build/outputs/apk/release/app-release.apk MonoLauncher.apk
+          cp app/build/outputs/apk/debug/app-debug.apk MonoLauncher-debug.apk
+          gh release create "v1.0-${{ github.run_number }}" MonoLauncher.apk MonoLauncher-debug.apk \
+            --title "Mono Launcher" \
+            --notes "MonoLauncher.apk = optimalizalt, ajanlott. MonoLauncher-debug.apk = tartalek, ha az optimalizalt valamiert nem mukodne."

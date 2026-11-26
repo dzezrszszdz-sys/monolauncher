@@ -1,5 +1,7 @@
 package app.monolauncher
 
+import android.os.Process
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -35,6 +37,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -48,7 +51,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -80,27 +85,40 @@ fun LauncherRoot(vm: LauncherViewModel) {
         label = "launchAlpha",
     )
 
+    // Külön grafikai réteg csak az animáció alatt kell.
+    val settled = launchScale == 1f && launchAlpha == 1f
+
+    LaunchedEffect(Unit) {
+        if (vm.startupMs < 0) {
+            val elapsed = SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime()
+            if (elapsed < 15_000) vm.startupMs = elapsed
+        }
+    }
+
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                scaleX = launchScale
-                scaleY = launchScale
-                alpha = launchAlpha
-            }
+            .then(
+                if (settled) Modifier else Modifier.graphicsLayer {
+                    scaleX = launchScale
+                    scaleY = launchScale
+                    alpha = launchAlpha
+                }
+            )
             .background(Ui.bg)
     ) {
         val d = Dims(maxWidth, maxHeight)
 
         // Háttérkép (ha van) sötétítéssel; különben tiszta fekete.
         vm.wallpaper?.let { wp ->
+            // A sötétítés színszűrővel történik: nincs külön, a teljes képernyőt takaró réteg.
             Image(
                 bitmap = wp,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                colorFilter = ColorFilter.tint(Color.Black.copy(alpha = vm.wallpaperDim), BlendMode.SrcOver),
                 modifier = Modifier.fillMaxSize(),
             )
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = vm.wallpaperDim)))
         }
 
         AnimatedContent(
@@ -167,8 +185,16 @@ fun LauncherRoot(vm: LauncherViewModel) {
             SearchOverlay(vm, d)
         }
 
+        if (vm.perfUnlocked && (vm.showFps || vm.showMem || vm.showTemp)) {
+            PerfOverlay(
+                vm,
+                Modifier.align(Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 4.dp),
+            )
+        }
+
         vm.menuApp?.let { AppMenuDialog(vm, it) }
         if (vm.settingsOpen) SettingsSheet(vm)
+        if (vm.perfOpen) PerformanceSheet(vm)
     }
 }
 

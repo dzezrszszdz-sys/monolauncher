@@ -1,11 +1,15 @@
 package app.monolauncher
 
+import android.content.pm.PackageManager
+import android.os.SystemClock
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,12 +35,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,6 +91,7 @@ fun SettingsSheet(vm: LauncherViewModel) {
                 Slider(
                     value = vm.clockSize,
                     onValueChange = vm::updateClockSize,
+                    onValueChangeFinished = vm::commitClockSize,
                     valueRange = 48f..110f,
                     colors = SliderDefaults.colors(
                         thumbColor = Ui.fg,
@@ -116,6 +123,7 @@ fun SettingsSheet(vm: LauncherViewModel) {
                 Slider(
                     value = vm.wallpaperDim,
                     onValueChange = vm::updateWallpaperDim,
+                    onValueChangeFinished = vm::commitWallpaperDim,
                     valueRange = 0f..0.9f,
                     colors = SliderDefaults.colors(
                         thumbColor = Ui.fg,
@@ -140,11 +148,49 @@ fun SettingsSheet(vm: LauncherViewModel) {
                 if (hiddenCount > 0) dialog = 2
             }
 
+            if (vm.perfUnlocked) {
+                SettingLink("Mono Performance", "Megnyitás") {
+                    vm.settingsOpen = false
+                    vm.perfOpen = true
+                }
+            }
+
             Spacer(Modifier.height(20.dp))
             Text(
                 "Alapértelmezett kezdőképernyővé tétel: Beállítások → Alkalmazások → " +
                     "Alapértelmezett alkalmazások → Kezdőképernyő alkalmazás.",
                 color = Ui.dim, fontSize = 12.sp, fontWeight = FontWeight.Light, lineHeight = 18.sp,
+            )
+
+            // 7 koppintás a verziószámra: feloldja a rejtett Mono Performance oldalt.
+            val ctx = LocalContext.current
+            val version = remember {
+                try {
+                    ctx.packageManager.getPackageInfo(ctx.packageName, PackageManager.PackageInfoFlags.of(0)).versionName ?: ""
+                } catch (e: Exception) { "" }
+            }
+            var taps by remember { mutableIntStateOf(0) }
+            var lastTap by remember { mutableLongStateOf(0L) }
+            Text(
+                "Mono Launcher $version",
+                color = Ui.faint,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        val now = SystemClock.elapsedRealtime()
+                        taps = if (now - lastTap > 1500) 1 else taps + 1
+                        lastTap = now
+                        if (taps >= 7) {
+                            taps = 0
+                            if (!vm.perfUnlocked) {
+                                vm.unlockPerf()
+                                Toast.makeText(ctx, "Mono Performance feloldva", Toast.LENGTH_SHORT).show()
+                            }
+                        } else if (taps >= 4 && !vm.perfUnlocked) {
+                            Toast.makeText(ctx, "Még ${7 - taps} koppintás…", Toast.LENGTH_SHORT).show()
+                        }
+                    },
             )
         }
     }
@@ -167,7 +213,7 @@ private fun appName(vm: LauncherViewModel, key: String?, fallback: String): Stri
     vm.apps.firstOrNull { it.key == key }?.label ?: fallback
 
 @Composable
-private fun Label(text: String) {
+fun Label(text: String) {
     Text(
         text = text.uppercase(),
         color = Ui.dim,
@@ -202,7 +248,7 @@ private fun PillRow(options: List<String>, selected: Int, onSelect: (Int) -> Uni
 }
 
 @Composable
-private fun SettingSwitch(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun SettingSwitch(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -225,7 +271,7 @@ private fun SettingSwitch(text: String, checked: Boolean, onChange: (Boolean) ->
 }
 
 @Composable
-private fun SettingLink(text: String, value: String, onClick: () -> Unit) {
+fun SettingLink(text: String, value: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

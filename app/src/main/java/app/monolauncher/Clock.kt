@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.IntState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -33,7 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LifecycleStartEffect
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -45,7 +44,8 @@ fun rememberNow(): State<LocalDateTime> {
     val ctx = LocalContext.current
     val now = remember { mutableStateOf(LocalDateTime.now()) }
 
-    DisposableEffect(ctx) {
+    // Csak akkor figyeli a percenkénti jelet, amikor a launcher látszik – háttérben nem ébreszti az appot.
+    LifecycleStartEffect(ctx) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 now.value = LocalDateTime.now()
@@ -58,16 +58,12 @@ fun rememberNow(): State<LocalDateTime> {
         }
         ContextCompat.registerReceiver(ctx, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         now.value = LocalDateTime.now()
-        onDispose { ctx.unregisterReceiver(receiver) }
-    }
-    LifecycleResumeEffect(Unit) {
-        now.value = LocalDateTime.now()
-        onPauseOrDispose { }
+        onStopOrDispose { ctx.unregisterReceiver(receiver) }
     }
     return now
 }
 
-private fun batteryPercent(intent: Intent?): Int {
+fun batteryPercent(intent: Intent?): Int {
     val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
     val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
     return if (level < 0 || scale <= 0) -1 else level * 100 / scale
@@ -78,7 +74,7 @@ fun rememberBattery(): IntState {
     val ctx = LocalContext.current
     val level = remember { mutableIntStateOf(-1) }
 
-    DisposableEffect(ctx) {
+    LifecycleStartEffect(ctx) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 level.intValue = batteryPercent(intent)
@@ -89,7 +85,7 @@ fun rememberBattery(): IntState {
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         level.intValue = batteryPercent(sticky)
-        onDispose { ctx.unregisterReceiver(receiver) }
+        onStopOrDispose { ctx.unregisterReceiver(receiver) }
     }
     return level
 }
